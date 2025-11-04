@@ -4,6 +4,7 @@ import WebKit
 class ViewController: UIViewController {
 
     private var webView: WKWebView!
+    private var popupWebView: WKWebView?
     
     override func loadView() {
         let webConfiguration = WKWebViewConfiguration()
@@ -42,16 +43,47 @@ extension ViewController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         print("Provisional navigation failed: \(error.localizedDescription)")
     }
+    
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        // Check if this is a redirect back from OAuth (often contains code, state, or other OAuth parameters)
+        if let url = navigationAction.request.url,
+           webView == popupWebView,
+           (url.absoluteString.contains("launcherui.web.app") && 
+            (url.absoluteString.contains("code=") || url.absoluteString.contains("state=") || url.fragment != nil)) {
+            // Close popup and load the URL in the main webview
+            if let popup = popupWebView {
+                popup.removeFromSuperview()
+                popupWebView = nil
+            }
+            self.webView.load(navigationAction.request)
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
 }
 
 extension ViewController: WKUIDelegate {
     // Handle popup windows (needed for OAuth flows)
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        // If the navigation action doesn't have a target frame, it's trying to open a new window
-        if navigationAction.targetFrame == nil {
-            webView.load(navigationAction.request)
+        // Create a popup webview for OAuth flows
+        let popup = WKWebView(frame: view.bounds, configuration: configuration)
+        popup.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        popup.navigationDelegate = self
+        popup.uiDelegate = self
+        
+        view.addSubview(popup)
+        popupWebView = popup
+        
+        return popup
+    }
+    
+    func webViewDidClose(_ webView: WKWebView) {
+        // Handle popup closure
+        if webView == popupWebView {
+            webView.removeFromSuperview()
+            popupWebView = nil
         }
-        return nil
     }
     
     // Handle JavaScript alerts
