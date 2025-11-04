@@ -51,22 +51,30 @@ extension ViewController: WKNavigationDelegate {
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Check if popup finished loading and should be closed
-        if webView == popupWebView,
-           let url = webView.url,
-           url.absoluteString.contains("launcherui.web.app"),
-           (url.absoluteString.contains("code=") || url.absoluteString.contains("state=") || url.fragment != nil) {
-            // OAuth callback detected - close popup and reload main view
-            if let popup = popupWebView {
-                popup.removeFromSuperview()
-                popupWebView = nil
-            }
-            // Reload the main webview to get the authenticated session
-            if let mainURL = self.webView.url {
-                self.webView.reload()
-            } else {
-                if let url = URL(string: "https://launcherui.web.app/") {
-                    let request = URLRequest(url: url)
-                    self.webView.load(request)
+        if webView == popupWebView {
+            print("Popup didFinish: \(webView.url?.absoluteString ?? "no url")")
+            
+            // Only close popup if we're back at the main app domain with OAuth params
+            if let url = webView.url,
+               url.host?.contains("launcherui.web.app") == true,
+               (url.absoluteString.contains("?code=") || 
+                url.absoluteString.contains("&code=") ||
+                url.absoluteString.contains("#") && url.fragment != nil) {
+                
+                print("OAuth callback detected, closing popup")
+                
+                // Small delay to ensure cookies/session are set
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self = self else { return }
+                    
+                    // Close popup
+                    if let popup = self.popupWebView {
+                        popup.removeFromSuperview()
+                        self.popupWebView = nil
+                    }
+                    
+                    // Reload the main webview to get the authenticated session
+                    self.webView.reload()
                 }
             }
         }
