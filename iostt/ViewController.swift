@@ -45,21 +45,31 @@ extension ViewController: WKNavigationDelegate {
     }
     
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        // Check if this is a redirect back from OAuth (often contains code, state, or other OAuth parameters)
-        if let url = navigationAction.request.url,
-           webView == popupWebView,
-           (url.absoluteString.contains("launcherui.web.app") && 
-            (url.absoluteString.contains("code=") || url.absoluteString.contains("state=") || url.fragment != nil)) {
-            // Close popup and load the URL in the main webview
+        // Allow navigation to proceed
+        decisionHandler(.allow)
+    }
+    
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Check if popup finished loading and should be closed
+        if webView == popupWebView,
+           let url = webView.url,
+           url.absoluteString.contains("launcherui.web.app"),
+           (url.absoluteString.contains("code=") || url.absoluteString.contains("state=") || url.fragment != nil) {
+            // OAuth callback detected - close popup and reload main view
             if let popup = popupWebView {
                 popup.removeFromSuperview()
                 popupWebView = nil
             }
-            self.webView.load(navigationAction.request)
-            decisionHandler(.cancel)
-            return
+            // Reload the main webview to get the authenticated session
+            if let mainURL = self.webView.url {
+                self.webView.reload()
+            } else {
+                if let url = URL(string: "https://launcherui.web.app/") {
+                    let request = URLRequest(url: url)
+                    self.webView.load(request)
+                }
+            }
         }
-        decisionHandler(.allow)
     }
 }
 
